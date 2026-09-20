@@ -105,9 +105,10 @@ function exportSVG(
 
   const width = bounds.width + padding * 2
   const height = bounds.height + padding * 2
+  const safeBg = sanitizeColor(backgroundColor, "#ffffff")
 
   let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">\n`
-  svg += `  <rect width="${width}" height="${height}" fill="${backgroundColor}"/>\n`
+  svg += `  <rect width="${width}" height="${height}" fill="${safeBg}"/>\n`
   svg += `  <g transform="translate(${padding - bounds.x}, ${padding - bounds.y})">\n`
 
   objects.forEach((obj) => {
@@ -194,26 +195,61 @@ function renderObject(ctx: CanvasRenderingContext2D, obj: CanvasObject) {
   }
 }
 
+export function escapeXml(unsafe: unknown): string {
+  if (unsafe === undefined || unsafe === null) return ""
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;")
+}
+
+export function sanitizeNumber(value: unknown, fallback = 0): number {
+  const num = typeof value === "number" ? value : Number.parseFloat(String(value))
+  return Number.isFinite(num) ? num : fallback
+}
+
+export function sanitizeColor(color: unknown, fallback = "#000000"): string {
+  if (typeof color !== "string") return fallback
+  const trimmed = color.trim()
+  if (/^(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\)|[a-zA-Z]+)$/.test(trimmed)) {
+    return escapeXml(trimmed)
+  }
+  return fallback
+}
+
 function renderObjectSVG(obj: CanvasObject): string {
+  const x = sanitizeNumber(obj.x)
+  const y = sanitizeNumber(obj.y)
+  const width = Math.max(0, sanitizeNumber(obj.width))
+  const height = Math.max(0, sanitizeNumber(obj.height))
+  const strokeWidth = Math.max(0, sanitizeNumber(obj.stroke_width, 1))
+  const fillColor = sanitizeColor(obj.fill_color, "#3b82f6")
+  const strokeColor = sanitizeColor(obj.stroke_color, "#1e40af")
+
   if (obj.type === "rectangle") {
-    return `    <rect x="${obj.x}" y="${obj.y}" width="${obj.width}" height="${obj.height}" fill="${obj.fill_color}" stroke="${obj.stroke_color}" stroke-width="${obj.stroke_width}"/>\n`
+    return `    <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>\n`
   } else if (obj.type === "circle") {
-    const radius = Math.min(obj.width, obj.height) / 2
-    const cx = obj.x + obj.width / 2
-    const cy = obj.y + obj.height / 2
-    return `    <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${obj.fill_color}" stroke="${obj.stroke_color}" stroke-width="${obj.stroke_width}"/>\n`
+    const radius = Math.min(width, height) / 2
+    const cx = x + width / 2
+    const cy = y + height / 2
+    return `    <circle cx="${cx}" cy="${cy}" r="${radius}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>\n`
   } else if (obj.type === "triangle") {
-    const x1 = obj.x + obj.width / 2
-    const y1 = obj.y
-    const x2 = obj.x
-    const y2 = obj.y + obj.height
-    const x3 = obj.x + obj.width
-    const y3 = obj.y + obj.height
-    return `    <polygon points="${x1},${y1} ${x2},${y2} ${x3},${y3}" fill="${obj.fill_color}" stroke="${obj.stroke_color}" stroke-width="${obj.stroke_width}"/>\n`
+    const x1 = x + width / 2
+    const y1 = y
+    const x2 = x
+    const y2 = y + height
+    const x3 = x + width
+    const y3 = y + height
+    return `    <polygon points="${x1},${y1} ${x2},${y2} ${x3},${y3}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>\n`
   } else if (obj.type === "line") {
-    return `    <line x1="${obj.x}" y1="${obj.y}" x2="${obj.x + obj.width}" y2="${obj.y + obj.height}" stroke="${obj.stroke_color}" stroke-width="${obj.stroke_width}"/>\n`
+    return `    <line x1="${x}" y1="${y}" x2="${x + width}" y2="${y + height}" stroke="${strokeColor}" stroke-width="${strokeWidth}"/>\n`
   } else if (obj.type === "text") {
-    return `    <text x="${obj.x + obj.width / 2}" y="${obj.y + obj.height / 2}" font-size="${obj.font_size || 16}" font-family="${obj.font_family || "Arial"}" fill="${obj.fill_color}" text-anchor="middle" dominant-baseline="middle">${obj.text_content || ""}</text>\n`
+    const fontSize = Math.max(1, sanitizeNumber(obj.font_size, 16))
+    const fontFamily = escapeXml(obj.font_family || "Arial")
+    const textContent = escapeXml(obj.text_content || "")
+    return `    <text x="${x + width / 2}" y="${y + height / 2}" font-size="${fontSize}" font-family="${fontFamily}" fill="${fillColor}" text-anchor="middle" dominant-baseline="middle">${textContent}</text>\n`
   }
   return ""
 }

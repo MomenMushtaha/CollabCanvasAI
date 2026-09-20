@@ -5,6 +5,7 @@ import { streamText, tool } from "ai"
 import { z } from "zod"
 import { getObjectsToMove } from "@/lib/group-utils"
 import { cookies } from "next/headers"
+import { safeFetchHtml } from "@/lib/ssrf"
 
 export const maxDuration = 30
 
@@ -310,22 +311,17 @@ export async function POST(request: Request) {
           try {
             // [v0] Fetching website:", url)
 
-            // Fetch the website HTML
-            const response = await fetch(url, {
-              headers: {
-                "User-Agent":
-                  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-              },
-            })
+            // Fetch the website HTML safely with SSRF protection
+            const fetchResult = await safeFetchHtml(url, { maxBytes: 2 * 1024 * 1024, timeoutMs: 8000 })
 
-            if (!response.ok) {
+            if (!fetchResult.ok || !fetchResult.html) {
               return {
                 success: false,
-                error: `Failed to fetch website: ${response.status} ${response.statusText}`,
+                error: fetchResult.error || `Failed to fetch website: ${fetchResult.status} ${fetchResult.statusText}`,
               }
             }
 
-            const html = await response.text()
+            const html = fetchResult.html
 
             // Extract design elements from HTML
             const designAnalysis = analyzeWebsiteDesign(html, url)

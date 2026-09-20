@@ -5,19 +5,35 @@ import { cookies, headers } from "next/headers"
 import { redirect } from "next/navigation"
 
 async function getOrigin(): Promise<string> {
-  const headersList = await headers()
-
-  const forwardedHost = headersList.get("x-forwarded-host")
-  if (forwardedHost) {
-    return `https://${forwardedHost}`
+  if (process.env.NEXT_PUBLIC_SITE_URL) {
+    return process.env.NEXT_PUBLIC_SITE_URL.replace(/\/$/, "")
   }
+
+  const headersList = await headers()
 
   const origin = headersList.get("origin")
   if (origin) {
-    return origin
+    try {
+      const parsedOrigin = new URL(origin)
+      if (parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:") {
+        return parsedOrigin.origin
+      }
+    } catch {
+      // Ignore malformed origin
+    }
   }
 
-  return process.env.NEXT_PUBLIC_SITE_URL || ""
+  const host = headersList.get("x-forwarded-host") || headersList.get("host")
+  const proto = headersList.get("x-forwarded-proto") || "https"
+  if (host) {
+    const primaryHost = host.split(",")[0].trim()
+    if (/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*(:[0-9]{1,5})?$/.test(primaryHost)) {
+      const safeProto = proto === "http" ? "http" : "https"
+      return `${safeProto}://${primaryHost}`
+    }
+  }
+
+  return ""
 }
 
 export async function signInWithGoogle() {
